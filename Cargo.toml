@@ -17,7 +17,7 @@ filesize = "0.2.0"
 insta = "0.16.0"
 jwalk = "0.5"
 libdiskonaut = { path = "libdiskonaut" }
-nix = "0.17.0"
+nix = "0.20.2"
 structopt = "0.3"
 tui = { version = "0.11", default-features = false, features = ["crossterm"] }
 unicode-width = "0.1.7"
