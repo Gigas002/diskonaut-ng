@@ -52,8 +52,8 @@ pub fn scan_folder(root: impl AsRef<Path>, options: ScanOptions) -> impl Iterato
         Ok(entry) => {
             let path = entry.path();
             match entry.metadata {
-                Ok(metadata) => ScanItem::Entry { path, metadata },
-                Err(_) => ScanItem::ReadError,
+                Some(Ok(metadata)) => ScanItem::Entry { path, metadata },
+                Some(Err(_)) | None => ScanItem::ReadError,
             }
         }
         Err(_) => ScanItem::ReadError,
