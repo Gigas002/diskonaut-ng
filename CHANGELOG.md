@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Dependency bumps: `dua-core` 5 → 6.
+
 ## [0.13.0] - 2026-09-04
 
 ### Changed
