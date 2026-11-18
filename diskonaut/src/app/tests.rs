@@ -131,3 +131,101 @@ fn reset_ui_mode_from_error_returns_to_normal() {
     assert!(matches!(app.ui_mode, UiMode::Normal));
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// Every screen at every size, with names wider in bytes than in columns
+/// (Cyrillic, CJK, emoji) and longer than any terminal: drawing must never
+/// panic (it would leave the terminal in raw mode).
+#[test]
+fn drawing_never_panics() {
+    let dir = temp_app_dir("drawing_never_panics");
+    let names = [
+        "a".repeat(200),
+        "ж".repeat(100),
+        "漢字".repeat(40),
+        "🦀".repeat(60),
+        "x".to_string(),
+    ];
+    for (i, name) in names.iter().enumerate() {
+        let mut file = File::create(dir.join(name)).expect("create file");
+        file.write_all(&vec![0u8; 4096 * (i + 1)]).expect("write");
+    }
+    fs::create_dir(dir.join("ü".repeat(120))).expect("create folder");
+    // Not UTF-8 (Latin-1 "été"): valid on Linux, shown lossily.
+    use std::os::unix::ffi::OsStrExt;
+    let mut latin1 = File::create(dir.join(OsStr::from_bytes(b"\xe9t\xe9"))).expect("create file");
+    latin1.write_all(&[0u8; 8192]).expect("write");
+    let latin1_folder = dir.join(OsStr::from_bytes(b"d\xe9j\xe0"));
+    fs::create_dir(&latin1_folder).expect("create folder");
+    let mut inner = File::create(latin1_folder.join("inside")).expect("create file");
+    inner.write_all(&[0u8; 16384]).expect("write");
+
+    let sizes = (1..60u16)
+        .step_by(4)
+        .flat_map(|w| (1..20u16).step_by(3).map(move |h| (w, h)))
+        .chain(
+            (60..200u16)
+                .step_by(13)
+                .flat_map(|w| (20..60u16).step_by(11).map(move |h| (w, h))),
+        );
+    let mut panics = vec![];
+    for (width, height) in sizes {
+        let mut app = app_with_scanned_dir(&dir, width, height);
+        // Inside the non-UTF-8 folder, for the title's path.
+        if width % 2 == 0
+            && app
+                .file_tree
+                .item_in_current_folder(latin1_folder.file_name().unwrap())
+                .is_some()
+        {
+            app.file_tree
+                .enter_folder(latin1_folder.file_name().unwrap());
+            app.render_and_update_board();
+        }
+        let tiles = app.board.tiles.len();
+        for selected in 0..tiles.max(1) {
+            if tiles > 0 {
+                app.board.set_selected_index(&selected);
+            }
+            let file = app.get_file_to_delete();
+            let mut modes = vec![
+                UiMode::Loading,
+                UiMode::Normal,
+                UiMode::ErrorMessage("é".repeat(300)),
+                UiMode::Exiting { app_loaded: true },
+                UiMode::Exiting { app_loaded: false },
+            ];
+            if let Some(file) = file {
+                modes.push(UiMode::DeleteFile(file.clone()));
+                modes.push(UiMode::WarningMessage(file));
+            }
+            for mode in modes {
+                let label = format!("{width}x{height} tile {selected} {}", mode_name(&mode));
+                app.ui_mode = mode;
+                let result =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.render()));
+                if result.is_err() {
+                    panics.push(label);
+                }
+            }
+        }
+    }
+    let _ = fs::remove_dir_all(&dir);
+    assert!(
+        panics.is_empty(),
+        "{} panics, e.g. {:?}",
+        panics.len(),
+        &panics[..panics.len().min(10)]
+    );
+}
+
+fn mode_name(mode: &UiMode) -> &'static str {
+    match mode {
+        UiMode::Loading => "Loading",
+        UiMode::Normal => "Normal",
+        UiMode::ScreenTooSmall => "ScreenTooSmall",
+        UiMode::DeleteFile(_) => "DeleteFile",
+        UiMode::ErrorMessage(_) => "ErrorMessage",
+        UiMode::Exiting { .. } => "Exiting",
+        UiMode::WarningMessage(_) => "WarningMessage",
+    }
+}

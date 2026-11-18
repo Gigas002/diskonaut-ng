@@ -5,6 +5,8 @@ use ::ratatui::widgets::Widget;
 use ::std::path::{Path, PathBuf};
 
 use libdiskonaut::format::{DisplaySize, truncate_middle};
+
+use crate::ui::text::width;
 use libdiskonaut::tiles::{FileType, Tile};
 
 fn render_currently_selected(buf: &mut Buffer, currently_selected: &Tile, max_len: u16, y: u16) {
@@ -37,17 +39,17 @@ fn render_currently_selected(buf: &mut Buffer, currently_selected: &Tile, max_le
             ],
         ),
     };
-    for line in lines {
-        if (line.chars().count() as u16) < max_len {
-            buf.set_string(1, y, line, style);
-            break;
-        }
-    }
+    // The name alone may not fit either: then it is shortened in the middle.
+    let line = lines
+        .into_iter()
+        .find(|line| width(line) < max_len)
+        .unwrap_or_else(|| truncate_middle(&file_name, max_len.saturating_sub(1)));
+    buf.set_string(1, y, line, style);
 }
 
 fn render_last_read_path(buf: &mut Buffer, last_read_path: &Path, max_len: u16, y: u16) {
     let last_read_path = last_read_path.to_string_lossy();
-    if (last_read_path.chars().count() as u16) < max_len {
+    if width(&last_read_path) < max_len {
         buf.set_string(1, y, last_read_path, Style::default());
     } else {
         buf.set_string(

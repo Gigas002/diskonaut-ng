@@ -4,6 +4,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::Widget;
 
 use crate::ui::grid::draw_filled_rect;
+use crate::ui::text::centered_x;
 use libdiskonaut::format::truncate_end;
 
 pub struct WarningBox {}
@@ -38,7 +39,7 @@ impl Widget for WarningBox {
             .bg(Color::Black)
             .fg(Color::Yellow)
             .add_modifier(Modifier::BOLD);
-        let text_max_length = warning_rect.width - 4;
+        let text_max_length = warning_rect.width.saturating_sub(4);
         let mut warning_text_start_position: u16 = 0;
 
         let possible_warning_texts = [
@@ -57,9 +58,7 @@ impl Widget for WarningBox {
                 // when dealing with warning messages, the beginning tends
                 // to be the important part
                 warning_text = truncate_end(line, text_max_length);
-                warning_text_start_position =
-                    ((warning_rect.width - warning_text.len() as u16) as f64 / 2.0).ceil() as u16
-                        + warning_rect.x;
+                warning_text_start_position = centered_x(&warning_rect, &warning_text);
                 break;
             }
         }
@@ -76,9 +75,7 @@ impl Widget for WarningBox {
 
         for line in controls_text.iter() {
             if text_max_length >= line.chars().count() as u16 {
-                let start_position =
-                    ((warning_rect.width - line.chars().count() as u16) as f64 / 2.0).ceil() as u16
-                        + warning_rect.x;
+                let start_position = centered_x(&warning_rect, line);
                 buf.set_string(
                     start_position,
                     warning_rect.y + warning_rect.height / 2 + 2,

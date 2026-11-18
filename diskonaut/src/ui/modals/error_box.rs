@@ -3,6 +3,8 @@ use ::ratatui::layout::Rect;
 use ::ratatui::style::{Color, Modifier, Style};
 use ::ratatui::widgets::Widget;
 
+use crate::ui::text::centered_x;
+
 use crate::ui::grid::draw_filled_rect;
 use libdiskonaut::format::truncate_end;
 
@@ -40,15 +42,13 @@ impl<'a> Widget for ErrorBox<'a> {
             .bg(Color::Black)
             .fg(Color::Red)
             .add_modifier(Modifier::BOLD);
-        let text_max_length = message_rect.width - 4;
+        let text_max_length = message_rect.width.saturating_sub(4);
 
         // here we truncate the end and not the middle because
         // when dealing with error messages, the beginning tends
         // to be the important part
         let error_text = truncate_end(self.error_message, text_max_length);
-        let error_text_start_position =
-            ((message_rect.width - error_text.chars().count() as u16) as f64 / 2.0).ceil() as u16
-                + message_rect.x;
+        let error_text_start_position = centered_x(&message_rect, &error_text);
 
         let controls_text = ["(Press <ESC> to dismiss)", "(<ESC> to dismiss)"];
 
@@ -62,9 +62,7 @@ impl<'a> Widget for ErrorBox<'a> {
 
         for line in controls_text.iter() {
             if text_max_length >= line.chars().count() as u16 {
-                let start_position =
-                    ((message_rect.width - line.chars().count() as u16) as f64 / 2.0).ceil() as u16
-                        + message_rect.x;
+                let start_position = centered_x(&message_rect, line);
                 buf.set_string(
                     start_position,
                     message_rect.y + message_rect.height / 2 + 2,

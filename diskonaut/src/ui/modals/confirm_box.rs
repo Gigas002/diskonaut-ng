@@ -3,6 +3,8 @@ use ::ratatui::layout::Rect;
 use ::ratatui::style::{Color, Modifier, Style};
 use ::ratatui::widgets::Widget;
 
+use crate::ui::text::centered_x;
+
 use crate::ui::grid::draw_filled_rect;
 use libdiskonaut::format::truncate_middle;
 
@@ -22,21 +24,18 @@ fn render_confirm_prompt(buf: &mut Buffer, confirm_rect: &Rect) {
     // to the longest one from possible_confirm_text array
     let mut confirm_text = String::from(possible_confirm_texts[0]);
     let mut confirm_text_start_position: u16 = 0;
-    let text_max_length = confirm_rect.width - 4;
+    let text_max_length = confirm_rect.width.saturating_sub(4);
     for line in possible_confirm_texts.iter() {
         // "+10" here is to make sure confirm message has always some padding
         if confirm_rect.width >= (line.chars().count() as u16) + 10 {
             confirm_text = truncate_middle(line, text_max_length);
-            confirm_text_start_position =
-                ((confirm_rect.width - confirm_text.len() as u16) as f64 / 2.0).ceil() as u16
-                    + confirm_rect.x;
+            confirm_text_start_position = centered_x(confirm_rect, &confirm_text);
             break;
         }
     }
 
     let y_n_line = "(y/n)";
-    let y_n_line_start_position =
-        ((confirm_rect.width - y_n_line.len() as u16) as f64 / 2.0).ceil() as u16 + confirm_rect.x;
+    let y_n_line_start_position = centered_x(confirm_rect, y_n_line);
 
     buf.set_string(
         confirm_text_start_position,

@@ -3,23 +3,23 @@ use ::ratatui::layout::Rect;
 use ::ratatui::style::{Color, Modifier, Style};
 use ::ratatui::widgets::Widget;
 
+use crate::ui::text::{centered_x, width};
+
 use crate::ui::grid::draw_filled_rect;
 use libdiskonaut::FileToDelete;
 use libdiskonaut::format::truncate_middle;
 use libdiskonaut::tiles::FileType;
 
+// The full path if it fits, else the file name, shortened in the middle.
+// Names need not be UTF-8: they are shown lossily.
 fn truncated_file_name_line(file_to_delete: &FileToDelete, max_len: u16) -> String {
-    let full_path = file_to_delete
-        .full_path()
-        .into_os_string()
-        .into_string()
-        .expect("could not convert os string to string");
+    let full_path = file_to_delete.full_path().to_string_lossy().into_owned();
     let file_name = file_to_delete
         .path_to_file
         .last()
-        .expect("could not find file to delete")
-        .to_string_lossy();
-    if max_len > full_path.len() as u16 {
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_default();
+    if max_len > width(&full_path) {
         full_path
     } else {
         truncate_middle(&file_name, max_len)
@@ -27,7 +27,7 @@ fn truncated_file_name_line(file_to_delete: &FileToDelete, max_len: u16) -> Stri
 }
 
 fn render_deletion_prompt(buf: &mut Buffer, message_rect: &Rect, file_to_delete: &FileToDelete) {
-    let max_text_len = message_rect.width - 4;
+    let max_text_len = message_rect.width.saturating_sub(4);
     let file_name_line = truncated_file_name_line(file_to_delete, max_text_len);
     let text_style = Style::default()
         .bg(Color::Black)
@@ -49,9 +49,9 @@ fn render_deletion_prompt(buf: &mut Buffer, message_rect: &Rect, file_to_delete:
                 .expect("folder should have descendants");
             let full_line = format!("Delete folder with {} children?", children);
             let short_line = "Delete folder?".to_string();
-            if max_text_len >= full_line.len() as u16 {
+            if max_text_len >= width(&full_line) {
                 full_line
-            } else if max_text_len >= short_line.len() as u16 {
+            } else if max_text_len >= width(&short_line) {
                 short_line
             } else {
                 unreachable!("should not render if terminal is so small");
@@ -59,14 +59,9 @@ fn render_deletion_prompt(buf: &mut Buffer, message_rect: &Rect, file_to_delete:
         }
     };
     let y_n_line = "(y/n)";
-    let question_line_start_position =
-        ((message_rect.width - question_line.len() as u16) as f64 / 2.0).ceil() as u16
-            + message_rect.x;
-    let file_name_line_start_position =
-        ((message_rect.width - file_name_line.len() as u16) as f64 / 2.0).ceil() as u16
-            + message_rect.x;
-    let y_n_line_start_position =
-        ((message_rect.width - y_n_line.len() as u16) as f64 / 2.0).ceil() as u16 + message_rect.x;
+    let question_line_start_position = centered_x(message_rect, &question_line);
+    let file_name_line_start_position = centered_x(message_rect, &file_name_line);
+    let y_n_line_start_position = centered_x(message_rect, y_n_line);
     buf.set_string(
         question_line_start_position,
         message_rect.y + message_rect.height / 2 - 3,
@@ -92,19 +87,15 @@ fn render_deletion_in_progress(
     message_rect: &Rect,
     file_to_delete: &FileToDelete,
 ) {
-    let max_text_len = message_rect.width - 4;
+    let max_text_len = message_rect.width.saturating_sub(4);
     let file_name_line = truncated_file_name_line(file_to_delete, max_text_len);
     let deleting_line = "Deleting";
     let text_style = Style::default()
         .bg(Color::Black)
         .fg(Color::Red)
         .add_modifier(Modifier::BOLD);
-    let deleting_line_start_position =
-        ((message_rect.width - deleting_line.len() as u16) as f64 / 2.0).ceil() as u16
-            + message_rect.x;
-    let file_line_start_position = ((message_rect.width - file_name_line.len() as u16) as f64 / 2.0)
-        .ceil() as u16
-        + message_rect.x;
+    let deleting_line_start_position = centered_x(message_rect, deleting_line);
+    let file_line_start_position = centered_x(message_rect, &file_name_line);
     buf.set_string(
         deleting_line_start_position,
         message_rect.y + message_rect.height / 2 - 1,

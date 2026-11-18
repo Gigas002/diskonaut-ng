@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Folders could show fewer files than their size and count said: when the parallel scan reported a folder after entries inside it, the folder was replaced by an empty one (744 folders of a 116k-entry scan). Their files were missing from the treemap and could not be deleted, and later deletions could underflow the counts.
+- diskonaut crashed on file and folder names that aren't UTF-8 (valid on Linux, e.g. Latin-1 names from old archives): when asked to delete one, and at start-up when the scanned folder's own path had one. They are now shown lossily.
+- Text is measured in terminal columns instead of bytes: non-ASCII names (Cyrillic, CJK, accents) were shortened although they fit, the delete prompt centered them wrongly (and debug builds panicked), and error messages with non-ASCII text crashed the error box. A selected name too long for the bottom line is shortened instead of not shown.
 
 ## [0.13.0] - 2026-09-04
 
