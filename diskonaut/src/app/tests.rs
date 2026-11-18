@@ -276,3 +276,47 @@ fn hints_show_the_configured_keys() {
     assert!(prompt.contains("(Y/n)"), "{prompt}");
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// Deleting a symlink removes the link, never what it points to, and works
+/// for a link whose target is gone: that one used to fail with "No such
+/// file or directory", because the type was read through the link.
+#[test]
+fn deleting_a_symlink_removes_only_the_link() {
+    use libdiskonaut::FileToDelete;
+    use libdiskonaut::tiles::FileType;
+    let dir = temp_app_dir("delete_symlink");
+    let outside = temp_app_dir("delete_symlink_target");
+    File::create(outside.join("precious"))
+        .and_then(|mut f| f.write_all(b"keep me"))
+        .expect("create target");
+    std::os::unix::fs::symlink(&outside, dir.join("to_folder")).expect("link");
+    std::os::unix::fs::symlink(outside.join("precious"), dir.join("to_file")).expect("link");
+    std::os::unix::fs::symlink(dir.join("gone"), dir.join("dangling")).expect("link");
+
+    let mut app = app_with_scanned_dir(&dir, 80, 24);
+    for name in ["to_folder", "to_file", "dangling"] {
+        let file_to_delete = FileToDelete {
+            path_in_filesystem: dir.clone(),
+            path_to_file: vec![OsString::from(name)],
+            file_type: FileType::File,
+            num_descendants: None,
+            size: 0,
+        };
+        app.delete_file(&file_to_delete);
+        assert!(
+            matches!(app.ui_mode, UiMode::Normal),
+            "{name}: {}",
+            mode_name(&app.ui_mode)
+        );
+        assert!(
+            fs::symlink_metadata(dir.join(name)).is_err(),
+            "{name} is gone"
+        );
+    }
+    assert_eq!(
+        fs::read(outside.join("precious")).expect("target kept"),
+        b"keep me"
+    );
+    let _ = fs::remove_dir_all(&dir);
+    let _ = fs::remove_dir_all(&outside);
+}
