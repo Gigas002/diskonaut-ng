@@ -7,7 +7,7 @@ edition = "2024"
 license = "MIT"
 description = "Terminal disk space visual navigator"
 repository = "https://github.com/Gigas002/diskonaut"
-version = "0.13.0"
+version = "0.14.0"
 
 [workspace.dependencies]
 clap = { version = "4", features = ["derive"] }
