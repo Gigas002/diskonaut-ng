@@ -13,7 +13,7 @@ pub const CONFIG_VERSION: u32 = 1;
 
 /// User configuration loaded from TOML.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct DiskonautConfig {
     pub version: u32,
     pub base: BaseConfig,
@@ -22,7 +22,7 @@ pub struct DiskonautConfig {
 
 /// `[base]` section — defaults used when CLI flags are not set.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct BaseConfig {
     #[serde(rename = "apparent-size")]
     pub apparent_size: bool,
@@ -30,7 +30,7 @@ pub struct BaseConfig {
 
 /// `[keybinds]` section — optional per-action overrides (see [`Keybinds::default`]).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct KeybindConfig {
     pub quit: Option<String>,
     pub delete: Option<String>,

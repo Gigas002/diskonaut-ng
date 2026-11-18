@@ -10,6 +10,8 @@ apparent-size = false
 
 [keybinds]
 # Single-character keys, special names (enter, escape, left, …), or modifiers (ctrl+c).
+# Characters match as typed: "D" is Shift+d, "?" works on any layout; "shift+d" means "D".
+# Keys diskonaut doesn't know are an error, so a typo can't silently do nothing.
 # Arrow keys and Ctrl+f/b/n/p remain available for movement unless you remap the vim keys below.
 
 quit = "q"
