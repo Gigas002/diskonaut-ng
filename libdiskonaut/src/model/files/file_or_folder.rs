@@ -106,8 +106,11 @@ impl Folder {
                 .expect("could not get next path element for file")
                 .to_os_string();
             self.num_descendants += 1;
+            // The walk may report a folder after entries inside it, which
+            // already created it: keep what it holds.
             self.contents
-                .insert(name.clone(), FileOrFolder::Folder(Folder::from(name)));
+                .entry(name.clone())
+                .or_insert(FileOrFolder::Folder(Folder::from(name)));
         }
     }
     pub fn add_file(&mut self, path: PathBuf, size: u128) {

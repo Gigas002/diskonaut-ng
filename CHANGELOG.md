@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Dependency bumps: `dua-core` 5 → 6.
 
+### Fixed
+
+- Folders could show fewer files than their size and count said: when the parallel scan reported a folder after entries inside it, the folder was replaced by an empty one (744 folders of a 116k-entry scan). Their files were missing from the treemap and could not be deleted, and later deletions could underflow the counts.
+
 ## [0.13.0] - 2026-09-04
 
 ### Changed
