@@ -4,7 +4,6 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Disk usage model, treemap layout, and formatting for diskonaut."
 readme = "../README.md"
 
@@ -13,3 +12,6 @@ dua-core = { workspace = true }
 rustix = { workspace = true }
 thiserror = { workspace = true }
 unicode-width = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

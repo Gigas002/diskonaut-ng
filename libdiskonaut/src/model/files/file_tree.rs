@@ -1,3 +1,4 @@
+use ::std::collections::HashSet;
 use ::std::ffi::{OsStr, OsString};
 use ::std::fs::Metadata;
 use ::std::path::{Path, PathBuf};
@@ -11,6 +12,8 @@ pub struct FileTree {
     pub path_in_filesystem: PathBuf,
     base_folder: Folder,
     show_apparent_size: bool,
+    /// (device, inode) of files with more than one link already counted.
+    seen_hard_links: HashSet<(u64, u64)>,
 }
 
 impl FileTree {
@@ -22,6 +25,7 @@ impl FileTree {
             space_freed: 0,
             failed_to_read: 0,
             show_apparent_size,
+            seen_hard_links: HashSet::new(),
         }
     }
     pub fn get_total_size(&self) -> u128 {
@@ -74,7 +78,26 @@ impl FileTree {
         for dir in entry_full_path.components().skip(base_path_length) {
             relative_path.push(dir);
         }
-        self.base_folder
-            .add_entry(entry_metadata, relative_path, self.show_apparent_size);
+        // Like du, a file with several hard links takes space once: the first
+        // link seen carries its size, the others are listed with none.
+        let counted_before = !entry_metadata.is_dir()
+            && hard_link_id(entry_metadata).is_some_and(|id| !self.seen_hard_links.insert(id));
+        if counted_before {
+            self.base_folder.add_file(relative_path, 0);
+        } else {
+            self.base_folder
+                .add_entry(entry_metadata, relative_path, self.show_apparent_size);
+        }
     }
+}
+
+#[cfg(unix)]
+fn hard_link_id(metadata: &Metadata) -> Option<(u64, u64)> {
+    use ::std::os::unix::fs::MetadataExt;
+    (metadata.nlink() > 1).then(|| (metadata.dev(), metadata.ino()))
+}
+
+#[cfg(not(unix))]
+fn hard_link_id(_metadata: &Metadata) -> Option<(u64, u64)> {
+    None
 }

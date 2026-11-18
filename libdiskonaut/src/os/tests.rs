@@ -8,11 +8,9 @@ fn is_user_admin_returns_bool() {
 
 #[test]
 fn size_on_disk_fast_is_at_least_file_length() {
-    let dir = std::env::temp_dir().join("diskonaut_os_block_size_test");
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = tempfile::tempdir().expect("create temp dir");
 
-    let file_path = dir.join("data.bin");
+    let file_path = dir.path().join("data.bin");
     let mut file = File::create(&file_path).expect("create file");
     file.write_all(&[0u8; 1024]).expect("write file");
 
@@ -23,6 +21,4 @@ fn size_on_disk_fast_is_at_least_file_length() {
         on_disk >= 1024,
         "on-disk size {on_disk} should cover 1024 logical bytes"
     );
-
-    let _ = std::fs::remove_dir_all(&dir);
 }

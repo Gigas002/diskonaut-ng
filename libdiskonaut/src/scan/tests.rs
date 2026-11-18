@@ -5,10 +5,11 @@ use ::std::path::PathBuf;
 use super::{ScanItem, ScanOptions, scan_folder, scan_into_tree};
 
 fn temp_scan_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("diskonaut_scan_test_{name}"));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
-    dir
+    tempfile::Builder::new()
+        .prefix(&format!("diskonaut_scan_test_{name}"))
+        .tempdir()
+        .expect("create temp dir")
+        .keep()
 }
 
 #[test]
@@ -21,6 +22,7 @@ fn scan_folder_finds_files() {
     let options = ScanOptions {
         parallel: false,
         show_apparent_size: false,
+        one_file_system: false,
     };
     let entries: Vec<_> = scan_folder(&dir, options)
         .filter_map(|item| match item {
@@ -47,6 +49,7 @@ fn scan_into_tree_aggregates_sizes() {
     let options = ScanOptions {
         parallel: false,
         show_apparent_size: true,
+        one_file_system: false,
     };
     let (tree, failed) = scan_into_tree(&dir, options);
 
@@ -54,4 +57,76 @@ fn scan_into_tree_aggregates_sizes() {
     assert!(tree.get_total_size() >= 1024);
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Hard links share one copy of the data: like `du`, the tree counts it
+/// once. Counting every link made a folder of three links to a 64K file
+/// show 192K, and deleting one link "freed" space that wasn't freed.
+#[test]
+fn hard_links_are_counted_once() {
+    let dir = temp_scan_dir("hard_links");
+    let original = dir.join("a");
+    File::create(&original)
+        .and_then(|mut f| f.write_all(&[1u8; 64 * 1024]))
+        .expect("write file");
+    std::fs::create_dir(dir.join("sub")).expect("create sub");
+    std::fs::hard_link(&original, dir.join("b")).expect("link b");
+    std::fs::hard_link(&original, dir.join("sub").join("c")).expect("link c");
+
+    for show_apparent_size in [true, false] {
+        let options = ScanOptions {
+            parallel: true,
+            show_apparent_size,
+            one_file_system: false,
+        };
+        let (tree, failed) = scan_into_tree(&dir, options);
+        assert_eq!(failed, 0);
+        let one_copy = 64 * 1024;
+        assert!(
+            tree.get_total_size() >= one_copy && tree.get_total_size() < 2 * one_copy,
+            "apparent={show_apparent_size}: {}",
+            tree.get_total_size()
+        );
+        // All three names are still listed.
+        assert_eq!(tree.get_total_descendants(), 4);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// With `one_file_system`, mounts below the root are listed but not
+/// entered. `/dev/pts` is a separate devpts mount wherever ptys exist
+/// (CI included); the test does nothing where it isn't.
+#[test]
+fn one_file_system_stays_on_the_root_filesystem() {
+    let mounts = std::fs::read_to_string("/proc/self/mounts").unwrap_or_default();
+    if !mounts
+        .lines()
+        .any(|line| line.split(' ').nth(1) == Some("/dev/pts"))
+    {
+        return;
+    }
+    let paths = |one_file_system| -> Vec<PathBuf> {
+        let options = ScanOptions {
+            parallel: true,
+            show_apparent_size: false,
+            one_file_system,
+        };
+        scan_folder("/dev", options)
+            .filter_map(|item| match item {
+                ScanItem::Entry { path, .. } => Some(path),
+                ScanItem::ReadError => None,
+            })
+            .collect()
+    };
+    let pts = std::path::Path::new("/dev/pts");
+
+    let all = paths(false);
+    assert!(all.iter().any(|p| p.parent() == Some(pts)), "{all:?}");
+
+    let one = paths(true);
+    assert!(one.iter().any(|p| p == pts), "the mount point is listed");
+    assert!(
+        !one.iter().any(|p| p.starts_with(pts) && p != pts),
+        "{one:?}"
+    );
 }

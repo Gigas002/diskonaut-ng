@@ -11,10 +11,11 @@ use super::{App, UiMode};
 use crate::config::Keybinds;
 
 fn temp_app_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("diskonaut_app_test_{name}"));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).expect("create temp dir");
-    dir
+    tempfile::Builder::new()
+        .prefix(&format!("diskonaut_app_test_{name}"))
+        .tempdir()
+        .expect("create temp dir")
+        .keep()
 }
 
 fn app_with_scanned_dir(dir: &PathBuf, width: u16, height: u16) -> App<TestBackend> {
@@ -29,6 +30,7 @@ fn app_with_scanned_dir(dir: &PathBuf, width: u16, height: u16) -> App<TestBacke
     let options = ScanOptions {
         parallel: false,
         show_apparent_size: true,
+        one_file_system: false,
     };
     for item in scan_folder(dir, options) {
         if let ScanItem::Entry {
@@ -128,5 +130,279 @@ fn reset_ui_mode_from_error_returns_to_normal() {
     app.ui_mode = UiMode::ErrorMessage("oops".into());
     app.reset_ui_mode();
     assert!(matches!(app.ui_mode, UiMode::Normal));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// Every screen at every size, with names wider in bytes than in columns
+/// (Cyrillic, CJK, emoji) and longer than any terminal: drawing must never
+/// panic (it would leave the terminal in raw mode).
+#[test]
+fn drawing_never_panics() {
+    let dir = temp_app_dir("drawing_never_panics");
+    let names = [
+        "a".repeat(200),
+        "ж".repeat(100),
+        "漢字".repeat(40),
+        "🦀".repeat(60),
+        "x".to_string(),
+    ];
+    for (i, name) in names.iter().enumerate() {
+        let mut file = File::create(dir.join(name)).expect("create file");
+        file.write_all(&vec![0u8; 4096 * (i + 1)]).expect("write");
+    }
+    fs::create_dir(dir.join("ü".repeat(120))).expect("create folder");
+    // Not UTF-8 (Latin-1 "été"): valid on Linux, shown lossily.
+    use std::os::unix::ffi::OsStrExt;
+    let mut latin1 = File::create(dir.join(OsStr::from_bytes(b"\xe9t\xe9"))).expect("create file");
+    latin1.write_all(&[0u8; 8192]).expect("write");
+    let latin1_folder = dir.join(OsStr::from_bytes(b"d\xe9j\xe0"));
+    fs::create_dir(&latin1_folder).expect("create folder");
+    let mut inner = File::create(latin1_folder.join("inside")).expect("create file");
+    inner.write_all(&[0u8; 16384]).expect("write");
+
+    let sizes = (1..60u16)
+        .step_by(4)
+        .flat_map(|w| (1..20u16).step_by(3).map(move |h| (w, h)))
+        .chain(
+            (60..200u16)
+                .step_by(13)
+                .flat_map(|w| (20..60u16).step_by(11).map(move |h| (w, h))),
+        );
+    let mut panics = vec![];
+    for (width, height) in sizes {
+        let mut app = app_with_scanned_dir(&dir, width, height);
+        // Inside the non-UTF-8 folder, for the title's path.
+        if width % 2 == 0
+            && app
+                .file_tree
+                .item_in_current_folder(latin1_folder.file_name().unwrap())
+                .is_some()
+        {
+            app.file_tree
+                .enter_folder(latin1_folder.file_name().unwrap());
+            app.render_and_update_board();
+        }
+        let tiles = app.board.tiles.len();
+        for selected in 0..tiles.max(1) {
+            if tiles > 0 {
+                app.board.set_selected_index(&selected);
+            }
+            let file = app.get_file_to_delete();
+            let mut modes = vec![
+                UiMode::Loading,
+                UiMode::Normal,
+                UiMode::ErrorMessage("é".repeat(300)),
+                UiMode::Exiting { app_loaded: true },
+                UiMode::Exiting { app_loaded: false },
+            ];
+            if let Some(file) = file {
+                modes.push(UiMode::DeleteFile(file.clone()));
+                modes.push(UiMode::WarningMessage(file));
+            }
+            for mode in modes {
+                let label = format!("{width}x{height} tile {selected} {}", mode_name(&mode));
+                app.ui_mode = mode;
+                let result =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.render()));
+                if result.is_err() {
+                    panics.push(label);
+                }
+            }
+        }
+    }
+    let _ = fs::remove_dir_all(&dir);
+    assert!(
+        panics.is_empty(),
+        "{} panics, e.g. {:?}",
+        panics.len(),
+        &panics[..panics.len().min(10)]
+    );
+}
+
+fn mode_name(mode: &UiMode) -> &'static str {
+    match mode {
+        UiMode::Loading => "Loading",
+        UiMode::Normal => "Normal",
+        UiMode::ScreenTooSmall => "ScreenTooSmall",
+        UiMode::DeleteFile(_) => "DeleteFile",
+        UiMode::ErrorMessage(_) => "ErrorMessage",
+        UiMode::Exiting { .. } => "Exiting",
+        UiMode::WarningMessage(_) => "WarningMessage",
+    }
+}
+
+/// The legend and prompts name the configured keys: the legend used to say
+/// `<BACKSPACE> - delete`, although delete has been `d` since 0.12.2.
+#[test]
+fn hints_show_the_configured_keys() {
+    let dir = temp_app_dir("hints");
+    File::create(dir.join("file"))
+        .and_then(|mut f| f.write_all(&[0u8; 4096]))
+        .expect("create file");
+    let screen = |keybinds: Keybinds, mode: fn(&App<TestBackend>) -> UiMode| {
+        let (tx, _rx) = mpsc::sync_channel(1);
+        let mut app = App::new(TestBackend::new(160, 30), dir.clone(), tx, true, keybinds);
+        for item in scan_folder(&dir, ScanOptions::default()) {
+            if let ScanItem::Entry { metadata, path } = item {
+                app.add_entry_to_base_folder(&metadata, path);
+            }
+        }
+        app.start_ui();
+        app.board.set_selected_index(&0);
+        app.ui_mode = mode(&app);
+        app.render();
+        app.display.rows().join("\n")
+    };
+    let normal = |_: &App<TestBackend>| UiMode::Normal;
+    let delete = |app: &App<TestBackend>| UiMode::DeleteFile(app.get_file_to_delete().unwrap());
+
+    let default = screen(Keybinds::default(), normal);
+    assert!(default.contains("<d> - delete"), "{default}");
+    assert!(!default.contains("BACKSPACE"), "{default}");
+
+    use crate::config::KeyBinding;
+    let keybinds = Keybinds {
+        delete: KeyBinding::char('x'),
+        quit: KeyBinding::char('Q'),
+        confirm: KeyBinding::char('Y'),
+        ..Keybinds::default()
+    };
+    let custom = screen(keybinds.clone(), normal);
+    assert!(
+        custom.contains("<x> - delete") && custom.contains("<Q> - quit"),
+        "{custom}"
+    );
+    let prompt = screen(keybinds, delete);
+    assert!(prompt.contains("(Y/n)"), "{prompt}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// Deleting a symlink removes the link, never what it points to, and works
+/// for a link whose target is gone: that one used to fail with "No such
+/// file or directory", because the type was read through the link.
+#[test]
+fn deleting_a_symlink_removes_only_the_link() {
+    use libdiskonaut::FileToDelete;
+    use libdiskonaut::tiles::FileType;
+    let dir = temp_app_dir("delete_symlink");
+    let outside = temp_app_dir("delete_symlink_target");
+    File::create(outside.join("precious"))
+        .and_then(|mut f| f.write_all(b"keep me"))
+        .expect("create target");
+    std::os::unix::fs::symlink(&outside, dir.join("to_folder")).expect("link");
+    std::os::unix::fs::symlink(outside.join("precious"), dir.join("to_file")).expect("link");
+    std::os::unix::fs::symlink(dir.join("gone"), dir.join("dangling")).expect("link");
+
+    let mut app = app_with_scanned_dir(&dir, 80, 24);
+    for name in ["to_folder", "to_file", "dangling"] {
+        let file_to_delete = FileToDelete {
+            path_in_filesystem: dir.clone(),
+            path_to_file: vec![OsString::from(name)],
+            file_type: FileType::File,
+            num_descendants: None,
+            size: 0,
+        };
+        app.delete_file(&file_to_delete);
+        assert!(
+            matches!(app.ui_mode, UiMode::Normal),
+            "{name}: {}",
+            mode_name(&app.ui_mode)
+        );
+        assert!(
+            fs::symlink_metadata(dir.join(name)).is_err(),
+            "{name} is gone"
+        );
+    }
+    assert_eq!(
+        fs::read(outside.join("precious")).expect("target kept"),
+        b"keep me"
+    );
+    let _ = fs::remove_dir_all(&dir);
+    let _ = fs::remove_dir_all(&outside);
+}
+
+/// Keys through the real instruction loop, from the scan to quitting:
+/// delete is refused while loading, Enter goes into the selected folder,
+/// `d` `n` cancels, `d` `y` deletes, Esc goes back, `q` `n` stays and
+/// `q` `y` quits. Everything is queued up front, so nothing waits on time.
+#[test]
+fn a_session_driven_by_keys() {
+    use crate::messages::{Instruction, handle_instructions};
+    use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+
+    let dir = temp_app_dir("session");
+    // `sub` is the largest tile, so it is the one selected first.
+    File::create(dir.join("small"))
+        .and_then(|mut f| f.write_all(&[0u8; 100_000]))
+        .expect("create file");
+    fs::create_dir(dir.join("sub")).expect("create sub");
+    File::create(dir.join("sub").join("inner"))
+        .and_then(|mut f| f.write_all(&[0u8; 300_000]))
+        .expect("create file");
+
+    let (event_tx, _event_rx) = mpsc::sync_channel(16);
+    let mut app = App::new(
+        TestBackend::new(80, 24),
+        dir.clone(),
+        event_tx,
+        true,
+        Keybinds::default(),
+    );
+    let (tx, rx) = mpsc::sync_channel(256);
+    let key = |code| Instruction::Keypress(Event::Key(KeyEvent::new(code, KeyModifiers::NONE)));
+    let char_key = |c| key(KeyCode::Char(c));
+    for item in scan_folder(&dir, ScanOptions::default()) {
+        if let ScanItem::Entry { metadata, path } = item {
+            tx.send(Instruction::AddEntryToBaseFolder((metadata, path)))
+                .expect("queue entry");
+        }
+    }
+    let script = vec![
+        Instruction::ToggleScanningVisualIndicator,
+        Instruction::RenderAndUpdateBoard,
+        // Loading: moving works, deleting only warns.
+        char_key('l'),
+        char_key('d'),
+        char_key('x'),
+        char_key('y'),
+        Instruction::StartUi,
+        key(KeyCode::Enter),
+        char_key('l'),
+        char_key('d'),
+        char_key('n'),
+        char_key('d'),
+        char_key('y'),
+        key(KeyCode::Esc),
+        char_key('+'),
+        char_key('-'),
+        char_key('0'),
+        char_key('j'),
+        char_key('k'),
+        char_key('h'),
+        Instruction::SetPathToRed,
+        Instruction::ResetCurrentPathColor,
+        Instruction::FlashSpaceFreed,
+        Instruction::UnflashSpaceFreed,
+        Instruction::ResetUiMode,
+        Instruction::Render,
+        char_key('q'),
+        char_key('n'),
+        char_key('q'),
+        char_key('y'),
+    ];
+    for instruction in script {
+        tx.send(instruction).expect("queue key");
+    }
+    handle_instructions(&mut app, rx);
+
+    assert!(!app.is_running);
+    assert!(dir.join("small").exists());
+    assert!(!dir.join("sub").join("inner").exists(), "d y deleted it");
+    assert!(dir.join("sub").exists());
+    assert!(
+        app.file_tree.current_folder_names.is_empty(),
+        "Esc went back"
+    );
+    assert!(app.file_tree.space_freed >= 300_000);
     let _ = fs::remove_dir_all(&dir);
 }

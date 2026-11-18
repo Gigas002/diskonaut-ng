@@ -1,5 +1,5 @@
 use ::std::iter::FromIterator;
-use ::unicode_width::UnicodeWidthChar;
+use ::unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 fn truncate_iter_to_unicode_width<Input, Collect>(iter: Input, width: usize) -> Collect
 where
@@ -17,7 +17,7 @@ where
 pub fn truncate_middle(row: &str, max_length: u16) -> String {
     if max_length < 6 {
         truncate_iter_to_unicode_width(row.chars(), max_length as usize)
-    } else if row.len() as u16 > max_length {
+    } else if row.width() > max_length as usize {
         let split_point = (max_length as usize / 2) - 2;
         let first_slice = truncate_iter_to_unicode_width::<_, String>(row.chars(), split_point);
         let second_slice =
@@ -36,12 +36,15 @@ pub fn truncate_middle(row: &str, max_length: u16) -> String {
     }
 }
 
+/// `row` cut to `max_len` columns, ending in `...` when something was cut.
 pub fn truncate_end(row: &str, max_len: u16) -> String {
-    if row.chars().count() > max_len as usize {
-        let mut truncated = String::from(row);
-        truncated.truncate(max_len as usize - 3);
-        format!("{}...", truncated)
-    } else {
+    let max_len = max_len as usize;
+    if row.width() <= max_len {
         row.to_string()
+    } else if max_len < 3 {
+        truncate_iter_to_unicode_width(row.chars(), max_len)
+    } else {
+        let kept: String = truncate_iter_to_unicode_width(row.chars(), max_len - 3);
+        format!("{kept}...")
     }
 }

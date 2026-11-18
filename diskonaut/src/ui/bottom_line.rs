@@ -5,6 +5,9 @@ use ::ratatui::widgets::Widget;
 use ::std::path::{Path, PathBuf};
 
 use libdiskonaut::format::{DisplaySize, truncate_middle};
+
+use crate::ui::KeyHints;
+use crate::ui::text::width;
 use libdiskonaut::tiles::{FileType, Tile};
 
 fn render_currently_selected(buf: &mut Buffer, currently_selected: &Tile, max_len: u16, y: u16) {
@@ -37,17 +40,17 @@ fn render_currently_selected(buf: &mut Buffer, currently_selected: &Tile, max_le
             ],
         ),
     };
-    for line in lines {
-        if (line.chars().count() as u16) < max_len {
-            buf.set_string(1, y, line, style);
-            break;
-        }
-    }
+    // The name alone may not fit either: then it is shortened in the middle.
+    let line = lines
+        .into_iter()
+        .find(|line| width(line) < max_len)
+        .unwrap_or_else(|| truncate_middle(&file_name, max_len.saturating_sub(1)));
+    buf.set_string(1, y, line, style);
 }
 
 fn render_last_read_path(buf: &mut Buffer, last_read_path: &Path, max_len: u16, y: u16) {
     let last_read_path = last_read_path.to_string_lossy();
-    if (last_read_path.chars().count() as u16) < max_len {
+    if width(&last_read_path) < max_len {
         buf.set_string(1, y, last_read_path, Style::default());
     } else {
         buf.set_string(
@@ -59,45 +62,44 @@ fn render_last_read_path(buf: &mut Buffer, last_read_path: &Path, max_len: u16, 
     }
 }
 
-fn render_controls_legend(buf: &mut Buffer, hide_delete: bool, max_len: u16, y: u16) {
+fn render_controls_legend(
+    buf: &mut Buffer,
+    hints: &KeyHints,
+    hide_delete: bool,
+    max_len: u16,
+    y: u16,
+) {
+    let KeyHints {
+        enter,
+        parent,
+        delete,
+        zoom,
+        quit,
+        ..
+    } = hints;
     let (long_controls_line, short_controls_line) = if hide_delete {
         (
-            String::from(
-                "<arrows> - move around, <ENTER> - enter folder, <ESC> - parent folder, <+/-/0> - zoom in/out/reset, <q> - quit",
+            format!(
+                "<arrows> - move around, <{enter}> - enter folder, <{parent}> - parent folder, <{zoom}> - zoom in/out/reset, <{quit}> - quit"
             ),
-            String::from("←↓↑→/<ENTER>/<ESC>: navigate"),
+            format!("←↓↑→/<{enter}>/<{parent}>: navigate"),
         )
     } else {
         (
-            String::from(
-                "<arrows> - move around, <ENTER> - enter folder, <ESC> - parent folder, <BACKSPACE> - delete, <+/-/0> - zoom in/out/reset, <q> - quit",
+            format!(
+                "<arrows> - move around, <{enter}> - enter folder, <{parent}> - parent folder, <{delete}> - delete, <{zoom}> - zoom in/out/reset, <{quit}> - quit"
             ),
-            String::from("←↓↑→/<ENTER>/<ESC>: navigate, <BACKSPACE>: del"),
+            format!("←↓↑→/<{enter}>/<{parent}>: navigate, <{delete}>: del"),
         )
     };
-    let too_small_line = "(...)";
-    if max_len >= long_controls_line.chars().count() as u16 {
-        buf.set_string(
-            1,
-            y,
-            long_controls_line,
-            Style::default().add_modifier(Modifier::BOLD),
-        );
-    } else if max_len >= short_controls_line.chars().count() as u16 {
-        buf.set_string(
-            1,
-            y,
-            short_controls_line,
-            Style::default().add_modifier(Modifier::BOLD),
-        );
+    let line = if max_len >= width(&long_controls_line) {
+        long_controls_line
+    } else if max_len >= width(&short_controls_line) {
+        short_controls_line
     } else {
-        buf.set_string(
-            1,
-            y,
-            too_small_line,
-            Style::default().add_modifier(Modifier::BOLD),
-        );
-    }
+        "(...)".to_string()
+    };
+    buf.set_string(1, y, line, Style::default().add_modifier(Modifier::BOLD));
 }
 
 fn render_small_files_legend(buf: &mut Buffer, x: u16, y: u16, small_files_legend: &str) {
@@ -115,6 +117,7 @@ fn render_small_files_legend(buf: &mut Buffer, x: u16, y: u16, small_files_legen
 }
 
 pub struct BottomLine<'a> {
+    hints: &'a KeyHints,
     hide_delete: bool,
     hide_small_files_legend: bool,
     currently_selected: Option<&'a Tile>,
@@ -122,8 +125,9 @@ pub struct BottomLine<'a> {
 }
 
 impl<'a> BottomLine<'a> {
-    pub fn new() -> Self {
+    pub fn new(hints: &'a KeyHints) -> Self {
         Self {
+            hints,
             hide_delete: false,
             hide_small_files_legend: false,
             currently_selected: None,
@@ -175,6 +179,12 @@ impl<'a> Widget for BottomLine<'a> {
             );
         }
 
-        render_controls_legend(buf, self.hide_delete, max_controls_len, controls_line_y);
+        render_controls_legend(
+            buf,
+            self.hints,
+            self.hide_delete,
+            max_controls_len,
+            controls_line_y,
+        );
     }
 }

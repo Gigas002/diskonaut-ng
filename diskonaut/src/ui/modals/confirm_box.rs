@@ -3,10 +3,13 @@ use ::ratatui::layout::Rect;
 use ::ratatui::style::{Color, Modifier, Style};
 use ::ratatui::widgets::Widget;
 
+use crate::ui::KeyHints;
+use crate::ui::text::centered_x;
+
 use crate::ui::grid::draw_filled_rect;
 use libdiskonaut::format::truncate_middle;
 
-fn render_confirm_prompt(buf: &mut Buffer, confirm_rect: &Rect) {
+fn render_confirm_prompt(buf: &mut Buffer, confirm_rect: &Rect, hints: &KeyHints) {
     let text_style = Style::default()
         .bg(Color::Black)
         .fg(Color::White)
@@ -22,21 +25,18 @@ fn render_confirm_prompt(buf: &mut Buffer, confirm_rect: &Rect) {
     // to the longest one from possible_confirm_text array
     let mut confirm_text = String::from(possible_confirm_texts[0]);
     let mut confirm_text_start_position: u16 = 0;
-    let text_max_length = confirm_rect.width - 4;
+    let text_max_length = confirm_rect.width.saturating_sub(4);
     for line in possible_confirm_texts.iter() {
         // "+10" here is to make sure confirm message has always some padding
         if confirm_rect.width >= (line.chars().count() as u16) + 10 {
             confirm_text = truncate_middle(line, text_max_length);
-            confirm_text_start_position =
-                ((confirm_rect.width - confirm_text.len() as u16) as f64 / 2.0).ceil() as u16
-                    + confirm_rect.x;
+            confirm_text_start_position = centered_x(confirm_rect, &confirm_text);
             break;
         }
     }
 
-    let y_n_line = "(y/n)";
-    let y_n_line_start_position =
-        ((confirm_rect.width - y_n_line.len() as u16) as f64 / 2.0).ceil() as u16 + confirm_rect.x;
+    let y_n_line = hints.yes_no();
+    let y_n_line_start_position = centered_x(confirm_rect, &y_n_line);
 
     buf.set_string(
         confirm_text_start_position,
@@ -52,15 +52,17 @@ fn render_confirm_prompt(buf: &mut Buffer, confirm_rect: &Rect) {
     );
 }
 
-pub struct ConfirmBox {}
+pub struct ConfirmBox<'a> {
+    hints: &'a KeyHints,
+}
 
-impl ConfirmBox {
-    pub fn new() -> Self {
-        Self {}
+impl<'a> ConfirmBox<'a> {
+    pub fn new(hints: &'a KeyHints) -> Self {
+        Self { hints }
     }
 }
 
-impl Widget for ConfirmBox {
+impl Widget for ConfirmBox<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let (width, height) = if area.width > 150 {
             (150, 10)
@@ -87,6 +89,6 @@ impl Widget for ConfirmBox {
 
         draw_filled_rect(buf, fill_style, &confirm_rect);
 
-        render_confirm_prompt(buf, &confirm_rect);
+        render_confirm_prompt(buf, &confirm_rect, self.hints);
     }
 }

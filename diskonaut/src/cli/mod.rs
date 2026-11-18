@@ -13,6 +13,10 @@ pub struct Opt {
     /// Show file sizes rather than their block usage on disk
     #[arg(short, long)]
     pub apparent_size: bool,
+    /// Stay on the folder's filesystem: don't scan other disks, /proc or
+    /// network mounts below it
+    #[arg(short = 'x', long)]
+    pub one_file_system: bool,
     /// Path to config file (default: `~/.config/diskonaut/config.toml`)
     #[arg(short = 'c', long, value_name = "FILE")]
     pub config: Option<PathBuf>,

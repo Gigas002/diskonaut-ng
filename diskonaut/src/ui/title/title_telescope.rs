@@ -6,6 +6,8 @@ use ::std::cmp::max;
 
 use libdiskonaut::format::truncate_middle;
 
+use crate::ui::text::width;
+
 fn get_index_or_last(vec: &[CellSizeOpt], index: usize) -> &CellSizeOpt {
     match vec.get(index) {
         Some(item) => item,
@@ -148,13 +150,13 @@ impl TitleTelescope {
         let mut current_position = rect.x + 1;
         for cell_size_opt in &left_side {
             self.render_left_side_cell(cell_size_opt, current_position, rect.y, buf);
-            current_position += cell_size_opt.content.len() as u16;
+            current_position += width(&cell_size_opt.content);
         }
         self.render_pipe(current_position, rect.y, buf);
         current_position += 3;
         for cell_size_opt in &right_side {
             self.render_right_side_cell(cell_size_opt, current_position, rect.y, buf);
-            current_position += cell_size_opt.content.len() as u16;
+            current_position += width(&cell_size_opt.content);
         }
         if self.loading {
             let text_length = current_position - (rect.x + 1);
@@ -167,7 +169,7 @@ impl TitleTelescope {
         let mut current_position = rect.x + 1;
         for cell_size_opt in &left_side {
             self.render_left_side_cell(cell_size_opt, current_position, rect.y, buf);
-            current_position += cell_size_opt.content.len() as u16;
+            current_position += width(&cell_size_opt.content);
         }
         self.render_pipe(current_position, rect.y, buf);
         current_position += 3;
@@ -175,15 +177,18 @@ impl TitleTelescope {
         for (index, cell_size_opt) in right_side.into_iter().enumerate() {
             let style = self.style_of_right_side(cell_size_opt.style);
             let truncated_cell = if index as u16 + 1 == number_of_parts_to_truncate {
-                truncate_middle(&cell_size_opt.content, rect.width - 1 - current_position)
+                truncate_middle(
+                    &cell_size_opt.content,
+                    rect.width.saturating_sub(1 + current_position),
+                )
             } else {
                 truncate_middle(
                     &cell_size_opt.content,
-                    (rect.width - 1 - current_position) / number_of_parts_to_truncate,
+                    rect.width.saturating_sub(1 + current_position) / number_of_parts_to_truncate,
                 )
             };
             buf.set_string(current_position, rect.y, &truncated_cell, style);
-            current_position += truncated_cell.chars().count() as u16;
+            current_position += width(&truncated_cell);
         }
         if self.loading {
             let text_length = current_position - (rect.x + 1);
@@ -209,10 +214,10 @@ impl TitleTelescope {
         let line_candidate_right = self.right_side_candidate(i);
         let left_candidate_len = line_candidate_left
             .iter()
-            .fold(0, |len, c| len + c.content.len());
+            .fold(0, |len, c| len + usize::from(width(&c.content)));
         let right_candidate_len = line_candidate_right
             .iter()
-            .fold(0, |len, c| len + c.content.len());
+            .fold(0, |len, c| len + usize::from(width(&c.content)));
         let pipe_separator_len = 3;
         left_candidate_len + right_candidate_len + pipe_separator_len
     }

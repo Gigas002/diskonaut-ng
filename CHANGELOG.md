@@ -5,11 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.14.0] - Unreleased
+
+### Added
+
+- `-x` / `--one-file-system` (and `[base] one-file-system`) stays on the scanned folder's filesystem, like `du -x`: `diskonaut -x /` no longer walks `/proc` (where `-a` counted `/proc/kcore` as 128T), `/sys`, other disks or network mounts. In libdiskonaut, `ScanOptions` has a matching `one_file_system` field.
 
 ### Changed
 
 - Dependency bumps: `dua-core` 5 → 6.
+- Unknown keys in the config file (`apparent_size` for `apparent-size`, a misspelled action) are an error instead of being ignored silently.
+
+### Fixed
+
+- Folders could show fewer files than their size and count said: when the parallel scan reported a folder after entries inside it, the folder was replaced by an empty one (744 folders of a 116k-entry scan). Their files were missing from the treemap and could not be deleted, and later deletions could underflow the counts.
+- diskonaut crashed on file and folder names that aren't UTF-8 (valid on Linux, e.g. Latin-1 names from old archives): when asked to delete one, and at start-up when the scanned folder's own path had one. They are now shown lossily.
+- Text is measured in terminal columns instead of bytes: non-ASCII names (Cyrillic, CJK, accents) were shortened although they fit, the delete prompt centered them wrongly (and debug builds panicked), and error messages with non-ASCII text crashed the error box. A selected name too long for the bottom line is shortened instead of not shown.
+- A folder that doesn't exist (or a panic) left the terminal in raw mode, with no echo and no line editing, until `reset`. The folder is now checked before the terminal is touched, raw mode is always left again, and a panic restores the terminal before its message. Errors go to stderr.
+- Piping diskonaut's output (`diskonaut | less`) hung for seconds, then panicked and left the terminal raw; it now refuses with an error.
+- Keybinds to an uppercase letter or a shifted symbol (`delete = "D"`, `quit = "?"`) never fired, because terminals report those with Shift held; `shift+a` likewise. `Ctrl+C`-style names with capitals are accepted.
+- The controls line said `<BACKSPACE> - delete` although delete is `d` (since 0.12.2), and every on-screen hint (controls line, `(y/n)`, `<ESC> to dismiss`) showed the default keys even when the config changed them; they now show the configured keys.
+- Files with several hard links were counted once per link, so folders using them (git's helpers, ostree/flatpak, `cp -l` backups) looked bigger than they are. Like `du`, a file's space is now counted once; the other links are listed with no size.
+- A symlink whose target no longer exists couldn't be deleted ("No such file or directory").
 
 ## [0.13.0] - 2026-09-04
 

@@ -7,7 +7,7 @@ mod messages;
 mod state;
 mod ui;
 
-use ::std::io;
+use ::std::io::{self, IsTerminal};
 use ::std::path::PathBuf;
 use ::std::process;
 use ::std::sync::Arc;
@@ -33,12 +33,36 @@ use messages::{Event, Instruction, handle_events};
 
 fn main() {
     if let Err(err) = try_main() {
-        println!("Error: {}", err);
+        eprintln!("Error: {}", err);
         process::exit(2);
     }
 }
-fn get_stdout() -> io::Result<io::Stdout> {
-    Ok(io::stdout())
+
+/// Leaves raw mode when dropped, however `try_main` ends.
+struct RawMode;
+
+impl RawMode {
+    fn enable() -> io::Result<Self> {
+        enable_raw_mode()?;
+        Ok(Self)
+    }
+}
+
+impl Drop for RawMode {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+    }
+}
+
+/// Give the terminal back (cooked mode, a visible cursor) before a panic
+/// message is printed: a panic would otherwise leave the shell unusable.
+fn restore_terminal_on_panic() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = disable_raw_mode();
+        let _ = ratatui::crossterm::execute!(io::stdout(), ratatui::crossterm::cursor::Show);
+        default_hook(info);
+    }));
 }
 
 fn try_main() -> Result<(), Error> {
@@ -60,25 +84,30 @@ fn try_main() -> Result<(), Error> {
             path: config_path,
             source,
         })?;
-    let show_apparent_size = opts.apparent_size || diskonaut_config.base.apparent_size;
+    let scan_options = ScanOptions {
+        parallel: true,
+        show_apparent_size: opts.apparent_size || diskonaut_config.base.apparent_size,
+        one_file_system: opts.one_file_system || diskonaut_config.base.one_file_system,
+    };
 
-    match get_stdout() {
-        Ok(stdout) => {
-            enable_raw_mode()?;
-            let terminal_backend = CrosstermBackend::new(stdout);
-            let terminal_events = TerminalEvents {};
-            let folder = opts.resolve_folder()?;
-            start(
-                terminal_backend,
-                Box::new(terminal_events),
-                folder,
-                show_apparent_size,
-                keybinds,
-            );
-        }
-        Err(_) => return Err(Error::NoStdout),
+    // Everything that can fail before the UI runs goes first, while the
+    // terminal is still in cooked mode.
+    let folder = opts.resolve_folder()?;
+    // The UI draws to stdout and reads the cursor position back through
+    // the terminal: piped, it waited for a reply that never came and panicked.
+    if !io::stdout().is_terminal() {
+        return Err(Error::NoStdout);
     }
-    disable_raw_mode()?;
+
+    restore_terminal_on_panic();
+    let _raw_mode = RawMode::enable()?;
+    start(
+        CrosstermBackend::new(io::stdout()),
+        Box::new(TerminalEvents {}),
+        folder,
+        scan_options,
+        keybinds,
+    );
     Ok(())
 }
 
@@ -86,7 +115,7 @@ fn start<B>(
     terminal_backend: B,
     terminal_events: Box<dyn Iterator<Item = BackEvent> + Send>,
     path: PathBuf,
-    show_apparent_size: bool,
+    scan_options: ScanOptions,
     keybinds: config::Keybinds,
 ) where
     B: Backend + Send + 'static,
@@ -112,7 +141,7 @@ fn start<B>(
         terminal_backend,
         path.clone(),
         event_sender,
-        show_apparent_size,
+        scan_options.show_apparent_size,
         keybinds.clone(),
     );
 
@@ -172,10 +201,6 @@ fn start<B>(
                 let instruction_sender = instruction_sender.clone();
                 let loaded = loaded.clone();
                 move || {
-                    let scan_options = ScanOptions {
-                        parallel: true,
-                        show_apparent_size,
-                    };
                     'scanning: for item in scan_folder(&path, scan_options) {
                         let instruction_sent = match item {
                             ScanItem::Entry {

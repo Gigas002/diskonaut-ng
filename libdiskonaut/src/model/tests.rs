@@ -30,9 +30,11 @@ fn folder_nested_path() {
 
 #[test]
 fn file_tree_delete_path() {
-    let dir = std::env::temp_dir().join("diskonaut_model_test_delete");
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).expect("mkdir");
+    let dir = tempfile::Builder::new()
+        .prefix("diskonaut_model_test_delete")
+        .tempdir()
+        .expect("mkdir")
+        .keep();
     let file_path = dir.join("gone.txt");
     let mut f = fs::File::create(&file_path).expect("create");
     f.write_all(b"x").expect("write");
@@ -53,4 +55,29 @@ fn file_tree_delete_path() {
     assert_eq!(tree.get_total_descendants(), 0);
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+/// The parallel walk can report a folder after entries inside it. Adding the
+/// folder then must not replace it with an empty one: 744 folders of a scan
+/// of ~/.cargo/registry showed fewer files than their size and counts said.
+#[test]
+fn a_folder_reported_after_its_contents_keeps_them() {
+    let mut root = Folder::from(OsString::from("root"));
+    root.add_file(PathBuf::from("sub/a.txt"), 10);
+    root.add_folder(PathBuf::from("sub/deeper"));
+    root.add_file(PathBuf::from("sub/deeper/b.txt"), 5);
+    root.add_folder(PathBuf::from("sub"));
+
+    let Some(FileOrFolder::Folder(sub)) = root.path(vec!["sub".into()]) else {
+        panic!("sub is a folder");
+    };
+    assert_eq!(sub.contents.len(), 2);
+    assert_eq!(sub.size, 15);
+    let Some(FileOrFolder::Folder(deeper)) = sub.path(vec!["deeper".into()]) else {
+        panic!("deeper is a folder");
+    };
+    assert_eq!(deeper.contents.len(), 1);
+    // root: sub, sub/a.txt, sub/deeper, sub/deeper/b.txt; each counted once.
+    assert_eq!(root.num_descendants, 4);
+    assert_eq!(sub.num_descendants, 3);
 }

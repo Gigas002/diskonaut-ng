@@ -53,7 +53,7 @@ where
         show_apparent_size: bool,
         keybinds: Keybinds,
     ) -> Self {
-        let display = Display::new(terminal_backend);
+        let display = Display::new(terminal_backend, &keybinds);
         let board = Board::new(&Folder::new(&path_in_filesystem));
         let base_folder = Folder::new(&path_in_filesystem);
         let file_tree = ManuallyDrop::new(FileTree::new(
@@ -235,7 +235,9 @@ where
         self.ui_effects.deletion_in_progress = false;
 
         let full_path = file_to_delete.full_path();
-        match fs::metadata(&full_path) {
+        // The entry itself, not what a symlink points to: a link is removed
+        // as a file, and one whose target is gone can still be deleted.
+        match fs::symlink_metadata(&full_path) {
             Ok(metadata) => {
                 let file_type = metadata.file_type();
                 let file_removed = if file_type.is_dir() {

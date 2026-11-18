@@ -16,8 +16,8 @@ fn key_char(c: char) -> Event {
 }
 
 fn test_app(width: u16, height: u16) -> App<TestBackend> {
+    // Never scanned: the app only needs a folder name.
     let dir = std::env::temp_dir().join("diskonaut_input_test");
-    let _ = std::fs::create_dir_all(&dir);
     let (tx, _rx) = mpsc::sync_channel(1);
     App::new(
         TestBackend::new(width, height),

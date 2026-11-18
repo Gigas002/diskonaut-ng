@@ -8,6 +8,7 @@
 - **Treemap navigation** — proportional tiles for files and folders; zoom for dense directories
 - **In-session cleanup** — delete files or folders and track space freed in the title bar
 - **Apparent or on-disk size** — default shows blocks allocated on disk; `-a` uses logical file size
+- **One filesystem** — `-x` stays on the scanned folder's filesystem, like `du -x`: `diskonaut -x /` skips `/proc`, `/sys`, other disks and network mounts
 - **Unix-native** — Linux, macOS, and BSD; built on `ratatui` and parallel directory walking
 
 ## Requirements
