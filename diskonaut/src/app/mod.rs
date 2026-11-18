@@ -53,7 +53,7 @@ where
         show_apparent_size: bool,
         keybinds: Keybinds,
     ) -> Self {
-        let display = Display::new(terminal_backend);
+        let display = Display::new(terminal_backend, &keybinds);
         let board = Board::new(&Folder::new(&path_in_filesystem));
         let base_folder = Folder::new(&path_in_filesystem);
         let file_tree = ManuallyDrop::new(FileTree::new(

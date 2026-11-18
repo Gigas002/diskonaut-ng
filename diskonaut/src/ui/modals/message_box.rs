@@ -3,6 +3,7 @@ use ::ratatui::layout::Rect;
 use ::ratatui::style::{Color, Modifier, Style};
 use ::ratatui::widgets::Widget;
 
+use crate::ui::KeyHints;
 use crate::ui::text::{centered_x, width};
 
 use crate::ui::grid::draw_filled_rect;
@@ -26,7 +27,12 @@ fn truncated_file_name_line(file_to_delete: &FileToDelete, max_len: u16) -> Stri
     }
 }
 
-fn render_deletion_prompt(buf: &mut Buffer, message_rect: &Rect, file_to_delete: &FileToDelete) {
+fn render_deletion_prompt(
+    buf: &mut Buffer,
+    message_rect: &Rect,
+    file_to_delete: &FileToDelete,
+    hints: &KeyHints,
+) {
     let max_text_len = message_rect.width.saturating_sub(4);
     let file_name_line = truncated_file_name_line(file_to_delete, max_text_len);
     let text_style = Style::default()
@@ -58,10 +64,10 @@ fn render_deletion_prompt(buf: &mut Buffer, message_rect: &Rect, file_to_delete:
             }
         }
     };
-    let y_n_line = "(y/n)";
+    let y_n_line = hints.yes_no();
     let question_line_start_position = centered_x(message_rect, &question_line);
     let file_name_line_start_position = centered_x(message_rect, &file_name_line);
-    let y_n_line_start_position = centered_x(message_rect, y_n_line);
+    let y_n_line_start_position = centered_x(message_rect, &y_n_line);
     buf.set_string(
         question_line_start_position,
         message_rect.y + message_rect.height / 2 - 3,
@@ -113,13 +119,19 @@ fn render_deletion_in_progress(
 pub struct MessageBox<'a> {
     file_to_delete: &'a FileToDelete,
     deletion_in_progress: bool,
+    hints: &'a KeyHints,
 }
 
 impl<'a> MessageBox<'a> {
-    pub fn new(file_to_delete: &'a FileToDelete, deletion_in_progress: bool) -> Self {
+    pub fn new(
+        file_to_delete: &'a FileToDelete,
+        deletion_in_progress: bool,
+        hints: &'a KeyHints,
+    ) -> Self {
         Self {
             file_to_delete,
             deletion_in_progress,
+            hints,
         }
     }
 }
@@ -153,7 +165,7 @@ impl<'a> Widget for MessageBox<'a> {
         if self.deletion_in_progress {
             render_deletion_in_progress(buf, &message_rect, self.file_to_delete);
         } else {
-            render_deletion_prompt(buf, &message_rect, self.file_to_delete);
+            render_deletion_prompt(buf, &message_rect, self.file_to_delete, self.hints);
         }
     }
 }

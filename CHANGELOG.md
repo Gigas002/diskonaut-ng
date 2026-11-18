@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A folder that doesn't exist (or a panic) left the terminal in raw mode, with no echo and no line editing, until `reset`. The folder is now checked before the terminal is touched, raw mode is always left again, and a panic restores the terminal before its message. Errors go to stderr.
 - Piping diskonaut's output (`diskonaut | less`) hung for seconds, then panicked and left the terminal raw; it now refuses with an error.
 - Keybinds to an uppercase letter or a shifted symbol (`delete = "D"`, `quit = "?"`) never fired, because terminals report those with Shift held; `shift+a` likewise. `Ctrl+C`-style names with capitals are accepted.
+- The controls line said `<BACKSPACE> - delete` although delete is `d` (since 0.12.2), and every on-screen hint (controls line, `(y/n)`, `<ESC> to dismiss`) showed the default keys even when the config changed them; they now show the configured keys.
 
 ## [0.13.0] - 2026-09-04
 

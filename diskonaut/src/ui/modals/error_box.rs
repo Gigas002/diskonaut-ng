@@ -3,6 +3,7 @@ use ::ratatui::layout::Rect;
 use ::ratatui::style::{Color, Modifier, Style};
 use ::ratatui::widgets::Widget;
 
+use crate::ui::KeyHints;
 use crate::ui::text::centered_x;
 
 use crate::ui::grid::draw_filled_rect;
@@ -10,11 +11,15 @@ use libdiskonaut::format::truncate_end;
 
 pub struct ErrorBox<'a> {
     error_message: &'a str,
+    hints: &'a KeyHints,
 }
 
 impl<'a> ErrorBox<'a> {
-    pub fn new(error_message: &'a str) -> Self {
-        Self { error_message }
+    pub fn new(error_message: &'a str, hints: &'a KeyHints) -> Self {
+        Self {
+            error_message,
+            hints,
+        }
     }
 }
 
@@ -50,7 +55,11 @@ impl<'a> Widget for ErrorBox<'a> {
         let error_text = truncate_end(self.error_message, text_max_length);
         let error_text_start_position = centered_x(&message_rect, &error_text);
 
-        let controls_text = ["(Press <ESC> to dismiss)", "(<ESC> to dismiss)"];
+        let dismiss = &self.hints.parent;
+        let controls_text = [
+            format!("(Press <{dismiss}> to dismiss)"),
+            format!("(<{dismiss}> to dismiss)"),
+        ];
 
         draw_filled_rect(buf, fill_style, &message_rect);
         buf.set_string(

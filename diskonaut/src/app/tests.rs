@@ -229,3 +229,49 @@ fn mode_name(mode: &UiMode) -> &'static str {
         UiMode::WarningMessage(_) => "WarningMessage",
     }
 }
+
+/// The legend and prompts name the configured keys: the legend used to say
+/// `<BACKSPACE> - delete`, although delete has been `d` since 0.12.2.
+#[test]
+fn hints_show_the_configured_keys() {
+    let dir = temp_app_dir("hints");
+    File::create(dir.join("file"))
+        .and_then(|mut f| f.write_all(&[0u8; 4096]))
+        .expect("create file");
+    let screen = |keybinds: Keybinds, mode: fn(&App<TestBackend>) -> UiMode| {
+        let (tx, _rx) = mpsc::sync_channel(1);
+        let mut app = App::new(TestBackend::new(160, 30), dir.clone(), tx, true, keybinds);
+        for item in scan_folder(&dir, ScanOptions::default()) {
+            if let ScanItem::Entry { metadata, path } = item {
+                app.add_entry_to_base_folder(&metadata, path);
+            }
+        }
+        app.start_ui();
+        app.board.set_selected_index(&0);
+        app.ui_mode = mode(&app);
+        app.render();
+        app.display.rows().join("\n")
+    };
+    let normal = |_: &App<TestBackend>| UiMode::Normal;
+    let delete = |app: &App<TestBackend>| UiMode::DeleteFile(app.get_file_to_delete().unwrap());
+
+    let default = screen(Keybinds::default(), normal);
+    assert!(default.contains("<d> - delete"), "{default}");
+    assert!(!default.contains("BACKSPACE"), "{default}");
+
+    use crate::config::KeyBinding;
+    let keybinds = Keybinds {
+        delete: KeyBinding::char('x'),
+        quit: KeyBinding::char('Q'),
+        confirm: KeyBinding::char('Y'),
+        ..Keybinds::default()
+    };
+    let custom = screen(keybinds.clone(), normal);
+    assert!(
+        custom.contains("<x> - delete") && custom.contains("<Q> - quit"),
+        "{custom}"
+    );
+    let prompt = screen(keybinds, delete);
+    assert!(prompt.contains("(Y/n)"), "{prompt}");
+    let _ = fs::remove_dir_all(&dir);
+}

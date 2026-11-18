@@ -7,11 +7,12 @@ use libdiskonaut::FileTree;
 use libdiskonaut::tiles::{Area, Board};
 
 use crate::UiMode;
+use crate::config::Keybinds;
 use crate::state::UiEffects;
 use crate::ui::grid::RectangleGrid;
 use crate::ui::modals::{ConfirmBox, ErrorBox, MessageBox, WarningBox};
 use crate::ui::title::TitleLine;
-use crate::ui::{BottomLine, TermTooSmall};
+use crate::ui::{BottomLine, KeyHints, TermTooSmall};
 
 pub struct FolderInfo<'a> {
     pub path: &'a PathBuf,
@@ -24,17 +25,21 @@ where
     B: Backend,
 {
     terminal: Terminal<B>,
+    hints: KeyHints,
 }
 
 impl<B> Display<B>
 where
     B: Backend,
 {
-    pub fn new(terminal_backend: B) -> Self {
+    pub fn new(terminal_backend: B, keybinds: &Keybinds) -> Self {
         let mut terminal = Terminal::new(terminal_backend).expect("failed to create terminal");
         terminal.clear().expect("failed to clear terminal");
         terminal.hide_cursor().expect("failed to hide cursor");
-        Display { terminal }
+        Display {
+            terminal,
+            hints: KeyHints::new(keybinds),
+        }
     }
     pub fn size(&self) -> Rect {
         let size = self.terminal.size().expect("could not get terminal size");
@@ -47,6 +52,7 @@ where
         ui_mode: &UiMode,
         ui_effects: &UiEffects,
     ) {
+        let hints = &self.hints;
         self.terminal
             .draw(|f| {
                 let full_screen = f.area();
@@ -116,7 +122,7 @@ where
                             grid_area,
                         );
                         f.render_widget(
-                            BottomLine::new()
+                            BottomLine::new(hints)
                                 .currently_selected(board.currently_selected())
                                 .last_read_path(ui_effects.last_read_path.as_ref())
                                 .hide_delete()
@@ -148,7 +154,7 @@ where
                             grid_area,
                         );
                         f.render_widget(
-                            BottomLine::new()
+                            BottomLine::new(hints)
                                 .currently_selected(board.currently_selected())
                                 .hide_small_files_legend(
                                     board.unrenderable_tile_coordinates.is_none(),
@@ -180,7 +186,7 @@ where
                             grid_area,
                         );
                         f.render_widget(
-                            BottomLine::new()
+                            BottomLine::new(hints)
                                 .currently_selected(board.currently_selected())
                                 .hide_small_files_legend(
                                     board.unrenderable_tile_coordinates.is_none(),
@@ -188,7 +194,7 @@ where
                             chunks[2],
                         );
                         f.render_widget(
-                            MessageBox::new(file_to_delete, ui_effects.deletion_in_progress),
+                            MessageBox::new(file_to_delete, ui_effects.deletion_in_progress, hints),
                             full_screen,
                         );
                     }
@@ -214,14 +220,14 @@ where
                             grid_area,
                         );
                         f.render_widget(
-                            BottomLine::new()
+                            BottomLine::new(hints)
                                 .currently_selected(board.currently_selected())
                                 .hide_small_files_legend(
                                     board.unrenderable_tile_coordinates.is_none(),
                                 ),
                             chunks[2],
                         );
-                        f.render_widget(ErrorBox::new(message), full_screen);
+                        f.render_widget(ErrorBox::new(message, hints), full_screen);
                     }
                     UiMode::Exiting { app_loaded } => {
                         if *app_loaded {
@@ -239,7 +245,7 @@ where
                                 chunks[0],
                             );
                             f.render_widget(
-                                BottomLine::new()
+                                BottomLine::new(hints)
                                     .currently_selected(board.currently_selected())
                                     .hide_small_files_legend(
                                         board.unrenderable_tile_coordinates.is_none(),
@@ -262,7 +268,7 @@ where
                                 chunks[0],
                             );
                             f.render_widget(
-                                BottomLine::new()
+                                BottomLine::new(hints)
                                     .currently_selected(board.currently_selected())
                                     .last_read_path(ui_effects.last_read_path.as_ref())
                                     .hide_delete()
@@ -281,7 +287,7 @@ where
                             ),
                             grid_area,
                         );
-                        f.render_widget(ConfirmBox::new(), full_screen);
+                        f.render_widget(ConfirmBox::new(hints), full_screen);
                     }
                     UiMode::WarningMessage(_) => {
                         f.render_widget(
@@ -305,7 +311,7 @@ where
                             grid_area,
                         );
                         f.render_widget(
-                            BottomLine::new()
+                            BottomLine::new(hints)
                                 .currently_selected(board.currently_selected())
                                 .last_read_path(ui_effects.last_read_path.as_ref())
                                 .hide_delete()
@@ -323,5 +329,20 @@ where
     pub fn clear(&mut self) {
         self.terminal.clear().expect("failed to clear terminal");
         self.terminal.show_cursor().expect("failed to show cursor");
+    }
+}
+
+#[cfg(test)]
+impl Display<ratatui::backend::TestBackend> {
+    /// The screen as last drawn, one string per row.
+    pub fn rows(&self) -> Vec<String> {
+        let buffer = self.terminal.backend().buffer();
+        (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect()
+            })
+            .collect()
     }
 }

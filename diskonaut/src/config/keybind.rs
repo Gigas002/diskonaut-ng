@@ -134,6 +134,31 @@ impl KeyBinding {
     }
 }
 
+/// How a binding is shown on screen: `d`, `D`, `ENTER`, `Ctrl+c`.
+impl std::fmt::Display for KeyBinding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.modifiers.contains(KeyModifiers::CONTROL) {
+            f.write_str("Ctrl+")?;
+        }
+        if self.modifiers.contains(KeyModifiers::ALT) {
+            f.write_str("Alt+")?;
+        }
+        match self.code {
+            KeyCode::Char(' ') => f.write_str("SPACE"),
+            KeyCode::Char(c) => write!(f, "{c}"),
+            KeyCode::Enter => f.write_str("ENTER"),
+            KeyCode::Esc => f.write_str("ESC"),
+            KeyCode::Backspace => f.write_str("BACKSPACE"),
+            KeyCode::Tab => f.write_str("TAB"),
+            KeyCode::Left => f.write_str("←"),
+            KeyCode::Right => f.write_str("→"),
+            KeyCode::Up => f.write_str("↑"),
+            KeyCode::Down => f.write_str("↓"),
+            other => write!(f, "{other:?}"),
+        }
+    }
+}
+
 impl Keybinds {
     pub fn is_quit(&self, evt: &Event) -> bool {
         self.quit.matches_event(evt) || KeyBinding::ctrl_char('c').matches_event(evt)

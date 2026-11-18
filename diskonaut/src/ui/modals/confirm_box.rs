@@ -3,12 +3,13 @@ use ::ratatui::layout::Rect;
 use ::ratatui::style::{Color, Modifier, Style};
 use ::ratatui::widgets::Widget;
 
+use crate::ui::KeyHints;
 use crate::ui::text::centered_x;
 
 use crate::ui::grid::draw_filled_rect;
 use libdiskonaut::format::truncate_middle;
 
-fn render_confirm_prompt(buf: &mut Buffer, confirm_rect: &Rect) {
+fn render_confirm_prompt(buf: &mut Buffer, confirm_rect: &Rect, hints: &KeyHints) {
     let text_style = Style::default()
         .bg(Color::Black)
         .fg(Color::White)
@@ -34,8 +35,8 @@ fn render_confirm_prompt(buf: &mut Buffer, confirm_rect: &Rect) {
         }
     }
 
-    let y_n_line = "(y/n)";
-    let y_n_line_start_position = centered_x(confirm_rect, y_n_line);
+    let y_n_line = hints.yes_no();
+    let y_n_line_start_position = centered_x(confirm_rect, &y_n_line);
 
     buf.set_string(
         confirm_text_start_position,
@@ -51,15 +52,17 @@ fn render_confirm_prompt(buf: &mut Buffer, confirm_rect: &Rect) {
     );
 }
 
-pub struct ConfirmBox {}
+pub struct ConfirmBox<'a> {
+    hints: &'a KeyHints,
+}
 
-impl ConfirmBox {
-    pub fn new() -> Self {
-        Self {}
+impl<'a> ConfirmBox<'a> {
+    pub fn new(hints: &'a KeyHints) -> Self {
+        Self { hints }
     }
 }
 
-impl Widget for ConfirmBox {
+impl Widget for ConfirmBox<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let (width, height) = if area.width > 150 {
             (150, 10)
@@ -86,6 +89,6 @@ impl Widget for ConfirmBox {
 
         draw_filled_rect(buf, fill_style, &confirm_rect);
 
-        render_confirm_prompt(buf, &confirm_rect);
+        render_confirm_prompt(buf, &confirm_rect, self.hints);
     }
 }
