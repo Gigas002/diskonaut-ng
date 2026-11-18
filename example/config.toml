@@ -7,6 +7,9 @@ version = 1
 [base]
 # Use logical file size instead of on-disk block usage (same as `-a` / `--apparent-size`).
 apparent-size = false
+# Don't scan other filesystems mounted inside the folder: /proc, other disks,
+# network mounts (same as `-x` / `--one-file-system`).
+one-file-system = false
 
 [keybinds]
 # Single-character keys, special names (enter, escape, left, …), or modifiers (ctrl+c).

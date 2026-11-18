@@ -13,6 +13,7 @@ fn parses_defaults() {
         Opt {
             folder: None,
             apparent_size: false,
+            one_file_system: false,
             config: None,
         }
     );
@@ -26,6 +27,7 @@ fn parses_apparent_size_and_folder() {
         Opt {
             folder: Some(PathBuf::from("/tmp")),
             apparent_size: true,
+            one_file_system: false,
             config: None,
         }
     );
@@ -43,6 +45,7 @@ fn resolve_folder_errors_for_missing_path() {
     let opt = Opt {
         folder: Some(PathBuf::from("/nonexistent_diskonaut_test_path_9f3c2a")),
         apparent_size: false,
+        one_file_system: false,
         config: None,
     };
     let err = opt.resolve_folder().unwrap_err();
@@ -52,4 +55,11 @@ fn resolve_folder_errors_for_missing_path() {
 #[test]
 fn cli_definition_is_valid() {
     Opt::command().debug_assert();
+}
+
+#[test]
+fn parses_one_file_system() {
+    for args in [["diskonaut", "-x"], ["diskonaut", "--one-file-system"]] {
+        assert!(Opt::try_parse_from(args).unwrap().one_file_system);
+    }
 }

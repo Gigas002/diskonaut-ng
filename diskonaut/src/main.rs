@@ -84,7 +84,11 @@ fn try_main() -> Result<(), Error> {
             path: config_path,
             source,
         })?;
-    let show_apparent_size = opts.apparent_size || diskonaut_config.base.apparent_size;
+    let scan_options = ScanOptions {
+        parallel: true,
+        show_apparent_size: opts.apparent_size || diskonaut_config.base.apparent_size,
+        one_file_system: opts.one_file_system || diskonaut_config.base.one_file_system,
+    };
 
     // Everything that can fail before the UI runs goes first, while the
     // terminal is still in cooked mode.
@@ -101,7 +105,7 @@ fn try_main() -> Result<(), Error> {
         CrosstermBackend::new(io::stdout()),
         Box::new(TerminalEvents {}),
         folder,
-        show_apparent_size,
+        scan_options,
         keybinds,
     );
     Ok(())
@@ -111,7 +115,7 @@ fn start<B>(
     terminal_backend: B,
     terminal_events: Box<dyn Iterator<Item = BackEvent> + Send>,
     path: PathBuf,
-    show_apparent_size: bool,
+    scan_options: ScanOptions,
     keybinds: config::Keybinds,
 ) where
     B: Backend + Send + 'static,
@@ -137,7 +141,7 @@ fn start<B>(
         terminal_backend,
         path.clone(),
         event_sender,
-        show_apparent_size,
+        scan_options.show_apparent_size,
         keybinds.clone(),
     );
 
@@ -197,10 +201,6 @@ fn start<B>(
                 let instruction_sender = instruction_sender.clone();
                 let loaded = loaded.clone();
                 move || {
-                    let scan_options = ScanOptions {
-                        parallel: true,
-                        show_apparent_size,
-                    };
                     'scanning: for item in scan_folder(&path, scan_options) {
                         let instruction_sent = match item {
                             ScanItem::Entry {

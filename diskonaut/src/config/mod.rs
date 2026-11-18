@@ -26,6 +26,8 @@ pub struct DiskonautConfig {
 pub struct BaseConfig {
     #[serde(rename = "apparent-size")]
     pub apparent_size: bool,
+    #[serde(rename = "one-file-system")]
+    pub one_file_system: bool,
 }
 
 /// `[keybinds]` section — optional per-action overrides (see [`Keybinds::default`]).

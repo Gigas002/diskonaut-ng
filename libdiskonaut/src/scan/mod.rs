@@ -15,6 +15,10 @@ pub struct ScanOptions {
     pub parallel: bool,
     /// Passed through to [`FileTree`] when using [`scan_into_tree`].
     pub show_apparent_size: bool,
+    /// Don't descend into other filesystems mounted below the root (`du -x`):
+    /// `/proc`, `/sys`, other disks, network and FUSE mounts. Their mount
+    /// points are still listed.
+    pub one_file_system: bool,
 }
 
 impl Default for ScanOptions {
@@ -22,6 +26,7 @@ impl Default for ScanOptions {
         Self {
             parallel: true,
             show_apparent_size: false,
+            one_file_system: false,
         }
     }
 }
@@ -41,12 +46,19 @@ pub fn scan_folder(root: impl AsRef<Path>, options: ScanOptions) -> impl Iterato
         1
     };
 
+    let root_device = options
+        .one_file_system
+        .then(|| device_of(root.as_ref()))
+        .flatten();
     walk(
         root.as_ref(),
         threads,
         Order::Completion,
         Options::default(),
-        |_| true,
+        move |entry| match (root_device, &entry.metadata) {
+            (Some(root_device), Some(Ok(metadata))) => device(metadata) == Some(root_device),
+            _ => true,
+        },
     )
     .map(|entry| match entry {
         Ok(entry) => {
@@ -58,6 +70,21 @@ pub fn scan_folder(root: impl AsRef<Path>, options: ScanOptions) -> impl Iterato
         }
         Err(_) => ScanItem::ReadError,
     })
+}
+
+fn device_of(path: &Path) -> Option<u64> {
+    device(&std::fs::metadata(path).ok()?)
+}
+
+#[cfg(unix)]
+fn device(metadata: &Metadata) -> Option<u64> {
+    use ::std::os::unix::fs::MetadataExt;
+    Some(metadata.dev())
+}
+
+#[cfg(not(unix))]
+fn device(_metadata: &Metadata) -> Option<u64> {
+    None
 }
 
 /// Walk `root` and populate a [`FileTree`]. Returns the tree and a count of read failures.

@@ -22,6 +22,7 @@ fn scan_folder_finds_files() {
     let options = ScanOptions {
         parallel: false,
         show_apparent_size: false,
+        one_file_system: false,
     };
     let entries: Vec<_> = scan_folder(&dir, options)
         .filter_map(|item| match item {
@@ -48,6 +49,7 @@ fn scan_into_tree_aggregates_sizes() {
     let options = ScanOptions {
         parallel: false,
         show_apparent_size: true,
+        one_file_system: false,
     };
     let (tree, failed) = scan_into_tree(&dir, options);
 
@@ -75,6 +77,7 @@ fn hard_links_are_counted_once() {
         let options = ScanOptions {
             parallel: true,
             show_apparent_size,
+            one_file_system: false,
         };
         let (tree, failed) = scan_into_tree(&dir, options);
         assert_eq!(failed, 0);
@@ -88,4 +91,42 @@ fn hard_links_are_counted_once() {
         assert_eq!(tree.get_total_descendants(), 4);
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// With `one_file_system`, mounts below the root are listed but not
+/// entered. `/dev/pts` is a separate devpts mount wherever ptys exist
+/// (CI included); the test does nothing where it isn't.
+#[test]
+fn one_file_system_stays_on_the_root_filesystem() {
+    let mounts = std::fs::read_to_string("/proc/self/mounts").unwrap_or_default();
+    if !mounts
+        .lines()
+        .any(|line| line.split(' ').nth(1) == Some("/dev/pts"))
+    {
+        return;
+    }
+    let paths = |one_file_system| -> Vec<PathBuf> {
+        let options = ScanOptions {
+            parallel: true,
+            show_apparent_size: false,
+            one_file_system,
+        };
+        scan_folder("/dev", options)
+            .filter_map(|item| match item {
+                ScanItem::Entry { path, .. } => Some(path),
+                ScanItem::ReadError => None,
+            })
+            .collect()
+    };
+    let pts = std::path::Path::new("/dev/pts");
+
+    let all = paths(false);
+    assert!(all.iter().any(|p| p.parent() == Some(pts)), "{all:?}");
+
+    let one = paths(true);
+    assert!(one.iter().any(|p| p == pts), "the mount point is listed");
+    assert!(
+        !one.iter().any(|p| p.starts_with(pts) && p != pts),
+        "{one:?}"
+    );
 }

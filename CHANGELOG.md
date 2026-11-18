@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `-x` / `--one-file-system` (and `[base] one-file-system`) stays on the scanned folder's filesystem, like `du -x`: `diskonaut -x /` no longer walks `/proc` (where `-a` counted `/proc/kcore` as 128T), `/sys`, other disks or network mounts. In libdiskonaut, `ScanOptions` has a matching `one_file_system` field.
+
 ### Changed
 
 - Dependency bumps: `dua-core` 5 → 6.
