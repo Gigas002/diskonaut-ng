@@ -5,10 +5,11 @@ use ::std::path::PathBuf;
 use super::{ScanItem, ScanOptions, scan_folder, scan_into_tree};
 
 fn temp_scan_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("diskonaut_scan_test_{name}"));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp dir");
-    dir
+    tempfile::Builder::new()
+        .prefix(&format!("diskonaut_scan_test_{name}"))
+        .tempdir()
+        .expect("create temp dir")
+        .keep()
 }
 
 #[test]

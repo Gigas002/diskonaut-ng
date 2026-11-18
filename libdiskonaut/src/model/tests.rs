@@ -30,9 +30,11 @@ fn folder_nested_path() {
 
 #[test]
 fn file_tree_delete_path() {
-    let dir = std::env::temp_dir().join("diskonaut_model_test_delete");
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).expect("mkdir");
+    let dir = tempfile::Builder::new()
+        .prefix("diskonaut_model_test_delete")
+        .tempdir()
+        .expect("mkdir")
+        .keep();
     let file_path = dir.join("gone.txt");
     let mut f = fs::File::create(&file_path).expect("create");
     f.write_all(b"x").expect("write");

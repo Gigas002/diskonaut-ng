@@ -13,3 +13,6 @@ dua-core = { workspace = true }
 rustix = { workspace = true }
 thiserror = { workspace = true }
 unicode-width = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -11,10 +11,11 @@ use super::{App, UiMode};
 use crate::config::Keybinds;
 
 fn temp_app_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("diskonaut_app_test_{name}"));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).expect("create temp dir");
-    dir
+    tempfile::Builder::new()
+        .prefix(&format!("diskonaut_app_test_{name}"))
+        .tempdir()
+        .expect("create temp dir")
+        .keep()
 }
 
 fn app_with_scanned_dir(dir: &PathBuf, width: u16, height: u16) -> App<TestBackend> {

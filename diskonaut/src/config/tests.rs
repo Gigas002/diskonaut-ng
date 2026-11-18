@@ -33,11 +33,11 @@ move-left = "left"
 
 #[test]
 fn rejects_unsupported_version() {
-    let path = std::env::temp_dir().join("diskonaut_config_test_v2.toml");
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.toml");
     std::fs::write(&path, "version = 2\n").unwrap();
     let err = DiskonautConfig::load(Some(&path)).unwrap_err();
     assert!(matches!(err, ConfigError::UnsupportedVersion(2)));
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
