@@ -320,3 +320,89 @@ fn deleting_a_symlink_removes_only_the_link() {
     let _ = fs::remove_dir_all(&dir);
     let _ = fs::remove_dir_all(&outside);
 }
+
+/// Keys through the real instruction loop, from the scan to quitting:
+/// delete is refused while loading, Enter goes into the selected folder,
+/// `d` `n` cancels, `d` `y` deletes, Esc goes back, `q` `n` stays and
+/// `q` `y` quits. Everything is queued up front, so nothing waits on time.
+#[test]
+fn a_session_driven_by_keys() {
+    use crate::messages::{Instruction, handle_instructions};
+    use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+
+    let dir = temp_app_dir("session");
+    // `sub` is the largest tile, so it is the one selected first.
+    File::create(dir.join("small"))
+        .and_then(|mut f| f.write_all(&[0u8; 100_000]))
+        .expect("create file");
+    fs::create_dir(dir.join("sub")).expect("create sub");
+    File::create(dir.join("sub").join("inner"))
+        .and_then(|mut f| f.write_all(&[0u8; 300_000]))
+        .expect("create file");
+
+    let (event_tx, _event_rx) = mpsc::sync_channel(16);
+    let mut app = App::new(
+        TestBackend::new(80, 24),
+        dir.clone(),
+        event_tx,
+        true,
+        Keybinds::default(),
+    );
+    let (tx, rx) = mpsc::sync_channel(256);
+    let key = |code| Instruction::Keypress(Event::Key(KeyEvent::new(code, KeyModifiers::NONE)));
+    let char_key = |c| key(KeyCode::Char(c));
+    for item in scan_folder(&dir, ScanOptions::default()) {
+        if let ScanItem::Entry { metadata, path } = item {
+            tx.send(Instruction::AddEntryToBaseFolder((metadata, path)))
+                .expect("queue entry");
+        }
+    }
+    let script = vec![
+        Instruction::ToggleScanningVisualIndicator,
+        Instruction::RenderAndUpdateBoard,
+        // Loading: moving works, deleting only warns.
+        char_key('l'),
+        char_key('d'),
+        char_key('x'),
+        char_key('y'),
+        Instruction::StartUi,
+        key(KeyCode::Enter),
+        char_key('l'),
+        char_key('d'),
+        char_key('n'),
+        char_key('d'),
+        char_key('y'),
+        key(KeyCode::Esc),
+        char_key('+'),
+        char_key('-'),
+        char_key('0'),
+        char_key('j'),
+        char_key('k'),
+        char_key('h'),
+        Instruction::SetPathToRed,
+        Instruction::ResetCurrentPathColor,
+        Instruction::FlashSpaceFreed,
+        Instruction::UnflashSpaceFreed,
+        Instruction::ResetUiMode,
+        Instruction::Render,
+        char_key('q'),
+        char_key('n'),
+        char_key('q'),
+        char_key('y'),
+    ];
+    for instruction in script {
+        tx.send(instruction).expect("queue key");
+    }
+    handle_instructions(&mut app, rx);
+
+    assert!(!app.is_running);
+    assert!(dir.join("small").exists());
+    assert!(!dir.join("sub").join("inner").exists(), "d y deleted it");
+    assert!(dir.join("sub").exists());
+    assert!(
+        app.file_tree.current_folder_names.is_empty(),
+        "Esc went back"
+    );
+    assert!(app.file_tree.space_freed >= 300_000);
+    let _ = fs::remove_dir_all(&dir);
+}
